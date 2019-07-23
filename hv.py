@@ -3,7 +3,6 @@
 import os
 import json
 import subprocess
-import email.utils
 import click
 import requests
 
@@ -21,25 +20,18 @@ def is_valid_fingerprint(fingerprint):
     return True
 
 
-def get_emails(fingerprint):
+def get_pubkey(fingerprint):
     """
-    Query gpg keyring for this key, and return a list of emails extracted from UIDs
+    Query the gpg keyring and returns an ASCII armored public key
     """
-    out = subprocess.check_output(['gpg2', '--batch', '--no-tty', '--with-colons', '--list-keys', fingerprint])
-    addrs = []
-    for line in out.decode().split('\n'):
-        if line.startswith('uid:'):
-            uid = line.split(':')[9]
-            addr = email.utils.parseaddr(uid)[1]
-            if '@' not in addr:
-                addr = uid
-            addrs.append(addr)
-    return addrs
-
+    out = subprocess.check_output(['gpg2', '--armor', '--export', fingerprint])
+    return out.decode()
 
 @click.command()
 @click.argument('keylist_filename')
 def main(keylist_filename):
+    api_endpoint = 'https://keys.openpgp.org/vks/v1'
+
     # Verify that keylist_filename is a valid keylist
     if not os.path.exists(keylist_filename):
         click.echo('Invalid keylist_filename')
@@ -60,14 +52,66 @@ def main(keylist_filename):
         click.echo('Not a valid keylist')
         return
     
-    # Make a dictionary of fingerprints to UIDs, by querying your gpg keyring
-    emails = {}
+    # Make a dictionary mapping fingerprints to emails and ASCII-armored pubkeys, by querying your gpg keyring
+    keys = {}
     for key in keylist['keys']:
         fingerprint = key['fingerprint']
         if not is_valid_fingerprint(fingerprint):
             click.echo('Skipping invalid fingerprint: {}'.format(fingerprint))
         else:
-            emails[fingerprint] = get_emails(fingerprint)
+            keys[fingerprint] = {
+                'pubkey': get_pubkey(fingerprint)
+            }    
+
+    # Upload each key to the keyserver
+    for fingerprint in keys:
+        click.echo('uploading {}'.format(fingerprint))
+
+        # Upload the pubkey
+        r = requests.post('{}/upload'.format(api_endpoint), json={
+            'keytext': keys[fingerprint]['pubkey']
+        })
+        response = r.json()
+
+        # Add the token and status to keys dict
+        keys[fingerprint]['token'] = response['token']
+        keys[fingerprint]['status'] = response['status']
+
+    click.echo()
+
+    # Loop through each key, displaying the verification status
+    needs_verification_statuses = ['unpublished', 'pending']
+    for fingerprint in keys:
+        addresses = []
+        for address in keys[fingerprint]['status']:
+            if keys[fingerprint]['status'][address] in needs_verification_statuses:
+                addresses.append(address)
+        
+        keys[fingerprint]['addresses'] = addresses
+
+        if len(addresses) > 0:
+            click.echo('{} needs verification: {}'.format(fingerprint, addresses))
+    
+    click.echo()
+
+    if click.confirm('Do you want to request verification emails for all of these keys?'):
+        for fingerprint in keys:
+            if len(keys[fingerprint]['addresses']) > 0:
+                click.echo('requesting verification for {}'.format(keys[fingerprint]['addresses']))
+                
+                # Request verification
+                r = requests.post('{}/request-verify'.format(api_endpoint), json={
+                    'token': keys[fingerprint]['token'],
+                    'addresses': keys[fingerprint]['addresses']
+                })
+
+                # Gracefully handle errors
+                if r.status_code == 200:
+                    click.echo("status_code: {}".format(r.status_code))
+
+                response = r.json()
+                if 'error' in response:
+                    click.echo('Error: {}'.format(response['error']))
 
 
 if __name__ == '__main__':
