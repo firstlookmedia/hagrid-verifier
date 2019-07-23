@@ -13,5 +13,5 @@ pipenv install
 Run the program:
 
 ```sh
-pipenv run ./hagrid-verifier.py --help
+pipenv run ./hv.py --help
 ```
