@@ -106,7 +106,7 @@ def main(keylist_filename):
                 })
 
                 # Gracefully handle errors
-                if r.status_code == 200:
+                if r.status_code != 200:
                     click.echo("status_code: {}".format(r.status_code))
 
                 response = r.json()
