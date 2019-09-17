@@ -51,7 +51,7 @@ def main(keylist_filename):
     if invalid:
         click.echo('Not a valid keylist')
         return
-    
+
     # Make a dictionary mapping fingerprints to emails and ASCII-armored pubkeys, by querying your gpg keyring
     keys = {}
     for key in keylist['keys']:
@@ -61,7 +61,7 @@ def main(keylist_filename):
         else:
             keys[fingerprint] = {
                 'pubkey': get_pubkey(fingerprint)
-            }    
+            }
 
     # Upload each key to the keyserver
     for fingerprint in keys:
@@ -74,8 +74,11 @@ def main(keylist_filename):
         response = r.json()
 
         # Add the token and status to keys dict
-        keys[fingerprint]['token'] = response['token']
-        keys[fingerprint]['status'] = response['status']
+        try:
+            keys[fingerprint]['token'] = response['token']
+            keys[fingerprint]['status'] = response['status']
+        except KeyError:
+            print('KeyError ({}): {}'.format(fingerprint, response))
 
     click.echo()
 
@@ -83,22 +86,23 @@ def main(keylist_filename):
     needs_verification_statuses = ['unpublished', 'pending']
     for fingerprint in keys:
         addresses = []
-        for address in keys[fingerprint]['status']:
-            if keys[fingerprint]['status'][address] in needs_verification_statuses:
-                addresses.append(address)
-        
-        keys[fingerprint]['addresses'] = addresses
+        if 'status' in keys[fingerprint]:
+            for address in keys[fingerprint]['status']:
+                if keys[fingerprint]['status'][address] in needs_verification_statuses:
+                    addresses.append(address)
+
+            keys[fingerprint]['addresses'] = addresses
 
         if len(addresses) > 0:
             click.echo('{} needs verification: {}'.format(fingerprint, addresses))
-    
+
     click.echo()
 
     if click.confirm('Do you want to request verification emails for all of these keys?'):
         for fingerprint in keys:
             if len(keys[fingerprint]['addresses']) > 0:
                 click.echo('requesting verification for {}'.format(keys[fingerprint]['addresses']))
-                
+
                 # Request verification
                 r = requests.post('{}/request-verify'.format(api_endpoint), json={
                     'token': keys[fingerprint]['token'],
