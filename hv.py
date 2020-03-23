@@ -25,6 +25,21 @@ def get_pubkey(fingerprint):
     Query the gpg keyring and returns an ASCII armored public key
     """
     out = subprocess.check_output(["gpg2", "--armor", "--export", fingerprint])
+
+    # If the key does not exist in the local keyring, try fetching from keyserver.ubuntu.com next
+    if len(out) == 0:
+        url = f"https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x{fingerprint}"
+        click.echo(f"Loading {url}")
+        r = requests.get(url)
+        if r.status_code != 200:
+            return ""
+        else:
+            # Import the key locally
+            p = subprocess.Popen(["gpg2", "--import"], stdin=subprocess.PIPE)
+            p.communicate(r.content)
+
+            return r.content.decode()
+
     return out.decode()
 
 
@@ -86,7 +101,9 @@ def main(keylist_filename):
     needs_verification_statuses = ["unpublished", "pending"]
     for fingerprint in keys:
         if keys[fingerprint]["pubkey"] == "":
-            click.echo(f"{fingerprint} not found in local keyring, skipping")
+            click.echo(
+                f"{fingerprint} not found in local keyring or SKS keyserver, skipping"
+            )
 
         addresses = []
         if "status" in keys[fingerprint]:
