@@ -64,27 +64,31 @@ def main(keylist_filename):
 
     # Upload each key to the keyserver
     for fingerprint in keys:
-        click.echo("uploading {}".format(fingerprint))
+        if keys[fingerprint]["pubkey"] != "":
+            click.echo("uploading {}".format(fingerprint))
 
-        # Upload the pubkey
-        r = requests.post(
-            "{}/upload".format(api_endpoint),
-            json={"keytext": keys[fingerprint]["pubkey"]},
-        )
-        response = r.json()
+            # Upload the pubkey
+            r = requests.post(
+                "{}/upload".format(api_endpoint),
+                json={"keytext": keys[fingerprint]["pubkey"]},
+            )
+            response = r.json()
 
-        # Add the token and status to keys dict
-        try:
-            keys[fingerprint]["token"] = response["token"]
-            keys[fingerprint]["status"] = response["status"]
-        except KeyError:
-            print("KeyError ({}): {}".format(fingerprint, response))
+            # Add the token and status to keys dict
+            try:
+                keys[fingerprint]["token"] = response["token"]
+                keys[fingerprint]["status"] = response["status"]
+            except KeyError:
+                print("KeyError ({}): {}".format(fingerprint, response))
 
     click.echo()
 
     # Loop through each key, displaying the verification status
     needs_verification_statuses = ["unpublished", "pending"]
     for fingerprint in keys:
+        if keys[fingerprint]["pubkey"] == "":
+            click.echo(f"{fingerprint} not found in local keyring, skipping")
+
         addresses = []
         if "status" in keys[fingerprint]:
             for address in keys[fingerprint]["status"]:
@@ -94,7 +98,7 @@ def main(keylist_filename):
             keys[fingerprint]["addresses"] = addresses
 
         if len(addresses) > 0:
-            click.echo("{} needs verification: {}".format(fingerprint, addresses))
+            click.echo(f"{fingerprint} needs verification: {addresses}")
 
     click.echo()
 
