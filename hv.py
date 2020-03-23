@@ -58,19 +58,18 @@ def main(keylist_filename):
     for key in keylist["keys"]:
         fingerprint = key["fingerprint"]
         if not is_valid_fingerprint(fingerprint):
-            click.echo("Skipping invalid fingerprint: {}".format(fingerprint))
+            click.echo(f"Skipping invalid fingerprint: {fingerprint}")
         else:
             keys[fingerprint] = {"pubkey": get_pubkey(fingerprint)}
 
     # Upload each key to the keyserver
     for fingerprint in keys:
         if keys[fingerprint]["pubkey"] != "":
-            click.echo("uploading {}".format(fingerprint))
+            click.echo(f"uploading {fingerprint}")
 
             # Upload the pubkey
             r = requests.post(
-                "{}/upload".format(api_endpoint),
-                json={"keytext": keys[fingerprint]["pubkey"]},
+                f"{api_endpoint}/upload", json={"keytext": keys[fingerprint]["pubkey"]},
             )
             response = r.json()
 
@@ -79,7 +78,7 @@ def main(keylist_filename):
                 keys[fingerprint]["token"] = response["token"]
                 keys[fingerprint]["status"] = response["status"]
             except KeyError:
-                print("KeyError ({}): {}".format(fingerprint, response))
+                print(f"KeyError ({fingerprint}): {response}")
 
     click.echo()
 
@@ -108,14 +107,12 @@ def main(keylist_filename):
         for fingerprint in keys:
             if len(keys[fingerprint]["addresses"]) > 0:
                 click.echo(
-                    "requesting verification for {}".format(
-                        keys[fingerprint]["addresses"]
-                    )
+                    f"requesting verification for {keys[fingerprint]['addresses']}"
                 )
 
                 # Request verification
                 r = requests.post(
-                    "{}/request-verify".format(api_endpoint),
+                    f"{api_endpoint}/request-verify",
                     json={
                         "token": keys[fingerprint]["token"],
                         "addresses": keys[fingerprint]["addresses"],
@@ -124,11 +121,11 @@ def main(keylist_filename):
 
                 # Gracefully handle errors
                 if r.status_code != 200:
-                    click.echo("status_code: {}".format(r.status_code))
+                    click.echo(f"status_code: {r.status_code}")
 
                 response = r.json()
                 if "error" in response:
-                    click.echo("Error: {}".format(response["error"]))
+                    click.echo(f"Error: {response['error']}")
 
 
 if __name__ == "__main__":
